@@ -1,0 +1,320 @@
+#pragma kernel Vote
+#pragma kernel ScanThreadGroup
+#pragma kernel ScanGroup
+#pragma kernel Compact
+#pragma kernel ClearArgs
+struct Args
+{
+    uint meshVertCount;
+    uint numOfInstance;
+    uint meshIndexStart;
+    uint meshBaseVertex;
+    uint reserved;
+};
+struct SpawnData
+{
+    float3 positionWS;
+    float hash;
+    float4 clumpInfo;
+    float4 postureData;
+};
+
+Texture2D<float4> _DensityMap;
+StructuredBuffer<SpawnData> _SpawnBuffer;
+StructuredBuffer<float4> _MaskBuffer;
+RWStructuredBuffer<uint> _VoteBuffer;
+RWStructuredBuffer<uint> _ScanBuffer;
+RWStructuredBuffer<uint> _GroupScanBufferIn;
+RWStructuredBuffer<uint> _GroupScanBufferOut;
+RWStructuredBuffer<SpawnData> _CompactBuffer;
+RWStructuredBuffer<Args> _ArgsBuffer0;
+RWStructuredBuffer<Args> _ArgsBuffer1;
+RWStructuredBuffer<Args> _ArgsBuffer2;
+
+uint _InstanceCount;
+int _NumTilePerClusterSide;
+float _ClusterBotLeftX, _ClusterBotLeftY, _TileSize;
+
+float _MaxRenderDist;
+float _DensityFalloffDist;
+float4x4 _Camera_P, _Camera_V;
+float _Camera_Near, _Camera_Far;
+float _GrassBoundScale;
+float _DensityFilter;
+bool _EnableOcclusionCulling;
+
+bool _UseMask;
+bool _ReverseMask;
+
+Texture2D<float> _HiZTexture;
+SamplerState sampler_HiZTexture;
+
+#define NUM_THREAD_GROUP 64
+#define NUM_GROUP 1024
+
+groupshared int temp[2 * NUM_THREAD_GROUP];
+groupshared int tempGroup[2 * NUM_GROUP];
+
+inline float LinearEyeDepth(float depth)
+{
+    // Reversed Z
+    depth = 1 - depth;
+    float x = 1 - _Camera_Far / _Camera_Near;
+    float y = _Camera_Far / _Camera_Near;
+    float z = x / _Camera_Far;
+    float w = y / _Camera_Far;
+    return 1.0 / ( z * depth  + w);
+}
+float invLerp(float from, float to, float value)
+{
+    return (value - from) / (to - from);
+}
+void SpaceConversion(float3 pos, out float3 posVS, out float3 posNDS, out float2 uv)
+{
+    posVS = mul(_Camera_V, float4(pos, 1)).xyz;
+    float4 posCS = mul(_Camera_P, float4(posVS, 1));
+    posNDS = posCS.xyz / posCS.w;
+    posNDS.z = posCS.w;
+    uv = posNDS.xy * 0.5 + 0.5;
+}
+
+[numthreads(128, 1, 1)]
+void Vote (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _InstanceCount)
+        return;
+    
+    float3 pos = _SpawnBuffer[id.x].positionWS;
+
+    float hash = _SpawnBuffer[id.x].hash;
+    
+    int x = (pos.x - _ClusterBotLeftX) / _TileSize;
+    int y = (pos.z - _ClusterBotLeftY) / _TileSize;
+    
+
+    float3 posNDS;
+    float3 posVS;
+    float2 uv;
+    SpaceConversion(pos, posVS, posNDS, uv);
+
+    float dist = posNDS.z / dot(normalize(posVS), float3(0, 0, -1));
+    
+    ///////////////////////////////////////////////////
+    //  Does current spawn pos has grass? 
+    float density = _DensityMap[int2(x,y)].x;
+    bool hasGrass = step(hash, density);
+    if (!hasGrass)
+    {
+        _VoteBuffer[id.x] = false;
+        return;
+    }
+    ///////////////////////////////////////////////////
+    
+    ///////////////////////////////////////////////////
+    //  Does current spawn pos are masked out? 
+   if (_UseMask)
+   {
+       float mask = _MaskBuffer[x * _NumTilePerClusterSide + y].y;
+       bool passMasking = _ReverseMask ? mask < 0.5 : mask > 0.5;
+       if (!passMasking)
+       {
+           _VoteBuffer[id.x] = false;
+           return;
+       }
+   }
+   
+   
+    ///////////////////////////////////////////////////
+    
+    ///////////////////////////////////////////////////
+    //  Does current spawn pos passes density filter?
+        bool passDensityDrop = step(frac(hash * 12.9898 * 78.233), _DensityFilter);
+    if (!passDensityDrop)
+    {
+        _VoteBuffer[id.x] = false;
+        return;
+    }
+    ///////////////////////////////////////////////////
+    
+    ///////////////////////////////////////////////////
+    //  Does current spawn pos passes distance drop?
+    float remap = saturate(invLerp(_DensityFalloffDist, _MaxRenderDist, dist));
+    remap = pow(remap, 0.3);
+    bool passedDistDrop = step(hash, remap) == 0;
+    if (!passedDistDrop)
+    {
+        _VoteBuffer[id.x] = false;
+        return;
+    }
+    ///////////////////////////////////////////////////
+
+    ///////////////////////////////////////////////////
+    //  Does current spawn pos passes frustum culling?
+    float rate = lerp(4, 1, dist / (_Camera_Far - _Camera_Near));
+        bool isInView = (
+    posNDS.x < -rate
+    || posNDS.x > rate
+    || posNDS.y > rate
+    || posNDS.y < -rate
+    || posNDS.z < -0.1
+    || dist > _MaxRenderDist) ? 0 : 1;
+    if (!isInView)
+    {
+        _VoteBuffer[id.x] = false;
+        return;
+    }
+    ///////////////////////////////////////////////////
+
+    ///////////////////////////////////////////////////
+    //  Does current spawn pos passes occlusion culling?
+    
+    if (!_EnableOcclusionCulling)
+    {
+        _VoteBuffer[id.x] = true;
+        return;
+    }
+        
+    float b = _GrassBoundScale;
+    float3 upperBoundPos = pos + float3(b, b, b);
+    float3 upperBoundPosVS;
+    float3 upperBoundPosNDS;
+    float2 upperBoundUV;
+    
+    float3 lowerBoundPos = pos - float3(b, 0, b);
+    float3 lowerBoundPosVS;
+    float3 lowerBoundPosNDS;
+    float2 lowerBoundUV;
+    SpaceConversion(upperBoundPos, upperBoundPosVS, upperBoundPosNDS, upperBoundUV);
+    SpaceConversion(lowerBoundPos, lowerBoundPosVS, lowerBoundPosNDS, lowerBoundUV);
+
+    float lboundDepth = LinearEyeDepth(_HiZTexture.SampleLevel(sampler_HiZTexture, lowerBoundUV, 0));
+    float uboundDepth = LinearEyeDepth(_HiZTexture.SampleLevel(sampler_HiZTexture, upperBoundUV, 0));
+    float depth = LinearEyeDepth(_HiZTexture.SampleLevel(sampler_HiZTexture, uv, 0));
+    bool passedOcclusion = posNDS.z > depth + 0.5 ?
+        lowerBoundPosNDS.z < lboundDepth || upperBoundPosNDS.z < uboundDepth :
+        true;
+    if (!passedOcclusion)
+    {
+        _VoteBuffer[id.x] = false;
+        return;
+    }
+    ///////////////////////////////////////////////////
+
+    _VoteBuffer[id.x] = true;
+}
+[numthreads(NUM_THREAD_GROUP, 1, 1)]
+void ScanThreadGroup(uint3 id : SV_DispatchThreadID, uint3 groupTID : SV_GroupThreadID, uint3 groupID : SV_GroupID)
+{
+    temp[2 * groupTID.x] = _VoteBuffer[2 * id.x];
+    temp[2 * groupTID.x + 1] = _VoteBuffer[2 * id.x + 1];
+    uint d;
+    uint offset = 1;
+    for (d = NUM_THREAD_GROUP; d > 0; d >>= 1)
+    {
+        GroupMemoryBarrierWithGroupSync();
+        if (groupTID.x < d)
+        {
+            int ai = offset * (2 * groupTID.x + 1) - 1;
+            int bi = offset * (2 * groupTID.x + 2) - 1;
+            temp[bi] += temp[ai];
+            
+        }
+        offset *= 2;
+
+    }
+    if (groupTID.x == 0)
+    {
+        _GroupScanBufferIn[groupID.x] = temp[NUM_THREAD_GROUP * 2 - 1];
+        temp[NUM_THREAD_GROUP * 2 - 1] = 0;
+    }
+    
+    for (d = 1; d <= NUM_THREAD_GROUP; d *= 2)
+    {
+        GroupMemoryBarrierWithGroupSync();
+        offset /= 2;
+        if (groupTID.x < d)
+        {
+            int ai = offset * (2 * groupTID.x + 1) - 1;
+            int bi = offset * (2 * groupTID.x + 2) - 1;
+            int t = temp[bi];
+            temp[bi] += temp[ai];
+            temp[ai] = t;
+        }
+
+    }
+    GroupMemoryBarrierWithGroupSync();
+    
+    _ScanBuffer[2 * id.x] = temp[2 * groupTID.x];
+    _ScanBuffer[2 * id.x + 1] = temp[2 * groupTID.x + 1];
+
+
+}
+[numthreads(NUM_GROUP, 1, 1)]
+void ScanGroup(uint3 id : SV_DispatchThreadID, uint3 groupTID : SV_GroupThreadID, uint3 groupID : SV_GroupID)
+{
+    tempGroup[2 * groupTID.x] = _GroupScanBufferIn[2 * id.x];
+    tempGroup[2 * groupTID.x + 1] = _GroupScanBufferIn[2 * id.x + 1];
+    uint d;
+    uint offset = 1;
+    for (d = NUM_GROUP; d > 0; d >>= 1)
+    {
+        GroupMemoryBarrierWithGroupSync();
+        if (groupTID.x < d)
+        {
+            int ai = offset * (2 * groupTID.x + 1) - 1;
+            int bi = offset * (2 * groupTID.x + 2) - 1;
+            tempGroup[bi] += tempGroup[ai];
+            
+        }
+        offset *= 2;
+
+    }
+    if (id.x == 0)
+        tempGroup[NUM_GROUP * 2 - 1] = 0;
+    
+    for (d = 1; d <= NUM_GROUP; d *= 2)
+    {
+        GroupMemoryBarrierWithGroupSync();
+        offset /= 2;
+        if (id.x < d)
+        {
+            int ai = offset * (2 * groupTID.x + 1) - 1;
+            int bi = offset * (2 * groupTID.x + 2) - 1;
+            int t = tempGroup[bi];
+            tempGroup[bi] += tempGroup[ai];
+            tempGroup[ai] = t;
+        }
+
+    }
+    GroupMemoryBarrierWithGroupSync();
+    
+    _GroupScanBufferOut[2 * id.x] = tempGroup[2 * groupTID.x];
+    _GroupScanBufferOut[2 * id.x + 1] = tempGroup[2 * groupTID.x + 1];
+
+
+}
+[numthreads(128, 1, 1)]
+void Compact(uint3 id : SV_DispatchThreadID, uint3 groupID : SV_GroupID)
+{
+    if (id.x >= _InstanceCount)
+        return;
+    int groupSum = _GroupScanBufferOut[groupID.x];
+    if (_VoteBuffer[id.x] == 1)
+    {
+        InterlockedAdd(_ArgsBuffer0[0].numOfInstance, 1);
+        InterlockedAdd(_ArgsBuffer1[0].numOfInstance, 1);
+        InterlockedAdd(_ArgsBuffer2[0].numOfInstance, 1);
+        _CompactBuffer[_ScanBuffer[id.x] + groupSum] = _SpawnBuffer[id.x];
+    }
+
+}
+[numthreads(1, 1, 1)]
+void ClearArgs(uint3 id : SV_DispatchThreadID)
+{
+    _ArgsBuffer0[0].numOfInstance = 0;
+    _ArgsBuffer1[0].numOfInstance = 0;
+    _ArgsBuffer2[0].numOfInstance = 0;
+}
+
+
+

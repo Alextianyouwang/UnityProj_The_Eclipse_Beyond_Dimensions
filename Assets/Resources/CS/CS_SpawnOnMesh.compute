@@ -1,0 +1,81 @@
+#pragma kernel CSMain
+
+#include "../../INCLUDE/HL_Noise.hlsl"
+
+struct SourceVertex {
+
+	float3 positionOS;
+	float2 uv; 
+	float3 normalOS;
+};
+StructuredBuffer <SourceVertex> _SourceVerticesBuffer;
+
+StructuredBuffer <int> _SourceTrianglesBuffer;
+
+struct SpawnData
+{
+    float3 positionWS;
+    float hash;
+    float4 clumpInfo;
+    float4 postureData;
+};
+AppendStructuredBuffer<SpawnData> _SpawnBuffer;
+
+struct TempVertex {
+	float3 positionWS;
+	float2 uv;
+	float3 normalWS;
+};
+uint _NumQuad;
+uint _Subdivisions = 2;
+float4x4 _LocalToWorld;
+
+TempVertex ConvertToWS(SourceVertex i) {
+	TempVertex o;
+	o.positionWS = mul(_LocalToWorld, float4 (i.positionOS, 1)).xyz;
+	o.uv = i.uv;
+	o.normalWS = mul(_LocalToWorld, float4 (i.normalOS, 0)).xyz;
+	return o;
+}
+
+
+[numthreads(128,1,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+	if (id.x >= _NumQuad)
+		return;
+
+	int triStart = id.x * 6;
+	TempVertex input[6];
+	[unroll]for (int i = 0; i < 6; i++) 
+		input[i] = ConvertToWS(_SourceVerticesBuffer[_SourceTrianglesBuffer[triStart + i]]);
+
+
+	uint iteration = _Subdivisions;
+
+    float3 chunkSize = input[2].positionWS - input[1].positionWS;
+    float3 inc = chunkSize / iteration;
+
+	for (uint x = 0; x < iteration; x++)
+	{
+		for (uint z = 0; z < iteration; z++)
+		{
+			SpawnData output;
+            float2 noise = rand2dTo2d(float2(input[1].positionWS.x + inc.x * x, input[1].positionWS.y + inc.z * z));
+            noise *= float2(inc.x,inc.z);
+            float2 noisePercent = noise / float2(chunkSize.x, chunkSize.z);
+			
+			float r1 = lerp(input[5].positionWS.y, input[2].positionWS.y, float(x) / float(iteration) + noisePercent.x);
+			float r2 = lerp(input[1].positionWS.y, input[0].positionWS.y, float(x) / float(iteration) + noisePercent.x); 
+            float y = lerp(r2, r1, float(z) / float(iteration) + noisePercent.y);
+			
+			output.positionWS = input[1].positionWS + float3(inc.x * x + noise.x, 0, inc.z * z + noise.y);
+			output.positionWS.y = y;
+            output.hash = 0;
+            output.clumpInfo = 0;
+            output.postureData = float4(0, 0, 0, 0);
+            _SpawnBuffer.Append(output);
+        }
+	}
+	
+}

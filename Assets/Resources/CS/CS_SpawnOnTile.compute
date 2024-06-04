@@ -1,0 +1,170 @@
+#pragma kernel CSMain
+#pragma kernel ResetArgs
+
+uint _NumTiles;
+uint _NumTilesPerSide;
+uint _Subdivisions;
+bool _SmoothPlacement;
+float _Time;
+float4x4 _Camera_V;
+float4x4 _Camera_P;
+
+StructuredBuffer<float3> _VertBuffer;
+struct SpawnData
+{
+    float3 positionWS;
+};
+AppendStructuredBuffer<SpawnData> _SpawnBuffer;
+
+
+struct Args
+{
+    uint meshVertCount;
+    uint numOfInstance;
+    uint meshIndexStart;
+    uint meshBaseVertex;
+    uint reserved;
+};
+RWStructuredBuffer<Args> _ArgsBuffer;
+RWStructuredBuffer<float4> _NoiseBuffer;
+
+#include "../../INCLUDE/HL_Noise.hlsl"
+float3 TriangleAverage(float3 a, float3 b, float3 c)
+{
+    return (a + b + c) / 3.0;
+}
+
+int2 GetCellCoord (uint i) 
+{
+    int2 centerCoord = int2(floor(i / _NumTilesPerSide), i % _NumTilesPerSide);
+   return centerCoord;
+}
+
+
+uint GetOffsetedIndex(uint i, int2 offset)
+{
+   
+    int2 coord = GetCellCoord(i);
+    coord += offset;
+    int index = coord.x * _NumTilesPerSide + coord.y;
+    return (uint) index;
+
+}
+float3 GetVertAtCurrentTile(uint index, int vertIndex)
+{
+    return _VertBuffer[index * 4 + vertIndex];
+}
+
+
+void GetVertsAtCurrentTile(uint index, out float3 verts[4])
+{
+    [unroll]
+    for (int i = 0; i < 4; i++)
+        verts[i] = GetVertAtCurrentTile(index,i);
+}
+
+void GetNeighborAveragedVerts(uint index, out float3 verts[4])
+{
+    uint2 coord = GetCellCoord(index);
+    if (coord.x >= _NumTilesPerSide - 1 || coord.y >= _NumTilesPerSide - 1
+    || coord.x <=0 || coord.y <= 0)
+    {
+        GetVertsAtCurrentTile(index, verts);
+        return;
+    }
+    uint neighborIndex[8];
+    int i = 0;
+    [unroll]
+    for (int x = -1; x <= 1; x++)
+    {
+        [unroll]
+        for (int y = -1; y <= 1; y++)
+        {
+            if (x == 0 && y == 0)
+                continue;
+            neighborIndex[i] = GetOffsetedIndex(index, int2(x, y));
+            i++;
+        }
+    }
+    
+    // BotLeft
+    float3 vblt0 =GetVertAtCurrentTile(neighborIndex[0], 2);
+    float3 vbl1 = GetVertAtCurrentTile(neighborIndex[3], 3);
+    float3 vbl3 = GetVertAtCurrentTile(neighborIndex[1], 1);
+    verts[0] = TriangleAverage(vblt0, vbl1, vbl3);
+    // BotRight
+    float3 vbr0 = GetVertAtCurrentTile(neighborIndex[3], 2);
+    float3 vbr1 = GetVertAtCurrentTile(neighborIndex[5], 3);
+    float3 vbr2 = GetVertAtCurrentTile(neighborIndex[6], 0);
+    verts[1] = TriangleAverage(vbr0, vbr1, vbr2);
+    // TopRight
+    float3 vtr1 = GetVertAtCurrentTile(neighborIndex[6], 3);
+    float3 vtr2 = GetVertAtCurrentTile(neighborIndex[7], 0);
+    float3 vtr3 = GetVertAtCurrentTile(neighborIndex[4], 1);
+    verts[2] = TriangleAverage(vtr1, vtr2, vtr3);
+    // TopLeft
+    float3 vtl0 = GetVertAtCurrentTile(neighborIndex[1], 2);
+    float3 vtl2 = GetVertAtCurrentTile(neighborIndex[4], 0);
+    float3 vtl3 = GetVertAtCurrentTile(neighborIndex[2], 1);
+    verts[3] = TriangleAverage(vtl0, vtl2, vtl3);
+
+}
+
+[numthreads(128,1,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _NumTiles )
+        return;
+    
+    
+        float3 verts[4];
+    GetVertsAtCurrentTile(id.x, verts);
+
+    GetNeighborAveragedVerts(id.x, verts);
+    
+    uint iteration = _Subdivisions;
+
+    float3 chunkSize = verts[2] - verts[0];
+    float3 inc = chunkSize / iteration;
+    
+    int2 tileCoord = GetCellCoord(id.x);
+    float tileNoise = perlinNoise((tileCoord - _Time * 100) * 0.01, float2(12.9898, 78.233));
+    
+    _NoiseBuffer[id.x] = float4(tileCoord / (float) _NumTilesPerSide, 0, 0);
+
+    for (uint x = 0; x < iteration; x++)
+    {
+        for (uint z = 0; z < iteration; z++)
+        {
+            float2 noise = rand2dTo2d(float2(verts[0].x + inc.x * x, verts[0].z + inc.z * z));
+            noise *= float2(inc.x, inc.z);
+            float2 noisePercent = noise / float2(chunkSize.x, chunkSize.z);
+            float r1 = lerp(verts[3].y, verts[2].y, float(x) / float(iteration) + noisePercent.x);
+            float r2 = lerp(verts[0].y, verts[1].y, float(x) / float(iteration) + noisePercent.x);
+            float y = lerp(r2, r1, float(z) / float(iteration) + noisePercent.y);
+            float3 pos = float3(verts[0].x + inc.x * x + noise.x, _SmoothPlacement? y : verts[0].y, verts[0].z + inc.z * z + noise.y);
+            
+            
+            float3 posVS = mul(_Camera_V, float4(pos, 1)).xyz;
+            float4 posCS = mul(_Camera_P, float4(posVS, 1));
+            float3 posNDS = posCS.xyz / posCS.w;
+            posNDS.z = -posCS.w;
+            bool isInView = (posNDS.x < -1.1 || posNDS.x > 1.1 || posNDS.z < -0.1 || posNDS.z / dot(normalize(posVS), float3(0,0,1)) > 50.0) ? 0 : 1;
+            if (isInView)
+            {
+                InterlockedAdd(_ArgsBuffer[0].numOfInstance, 1);
+                SpawnData o;
+                o.positionWS = pos;
+                _SpawnBuffer.Append(o);
+            }
+            
+        }
+    }
+
+}
+
+[numthreads(1, 1, 1)]
+void ResetArgs(uint3 id : SV_DispatchThreadID)
+{
+    _ArgsBuffer[0].numOfInstance = 0;
+}
