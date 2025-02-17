@@ -51,15 +51,12 @@ Shader "Procedural/S_TileDebug"
                 InstanceData i = _InstanceDataBuffer[instanceID];
                 o.positionWS = _VertBuffer[_TriangleBuffer[vertexID]] * i.size + i.position;
                 o.positionCS = mul(UNITY_MATRIX_VP, float4(o.positionWS, 1));
-
 #if _DEBUG_RANDOMID
                 o.color = _InstanceDataBuffer[instanceID].color;
-
 #elif _DEBUG_NOISE
-    o.color = _MaskBuffer[instanceID].xyzz;
-               // o.color = _NoiseBuffer[instanceID].xyzz;
+                o.color = _NoiseBuffer[instanceID].xyzz;
 #endif
-            
+                o.color = _MaskBuffer[instanceID].xyzz;
 
                 return o;
             }
