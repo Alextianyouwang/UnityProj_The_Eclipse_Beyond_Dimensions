@@ -16,13 +16,13 @@ MonoBehaviour:
   - {fileID: 4300000, guid: 19e6c15522128ae49b60270e1ac4575a, type: 2}
   - {fileID: 4300000, guid: 19e6c15522128ae49b60270e1ac4575a, type: 2}
   - {fileID: 4300000, guid: 19e6c15522128ae49b60270e1ac4575a, type: 2}
-  SpawnMeshMaterial: {fileID: 2100000, guid: 4a63e246b37500f42b2669305a776b47, type: 2}
-  DensityMap: {fileID: 2800000, guid: 53132e2a3adc9e74b9da408bd5e3fb05, type: 3}
-  SquaredInstancePerTile: 5
+  SpawnMeshMaterial: {fileID: 2100000, guid: 33fea21211ca31b43ae36c37a51c1df9, type: 2}
+  DensityMap: {fileID: 2800000, guid: cbb97f32798a1b148856e5e640c12a8b, type: 3}
+  SquaredInstancePerTile: 3
   SquaredChunksPerCluster: 8
   SquaredTilePerClump: 4
   OccludeeBoundScaleMultiplier: 1.5
   DensityFilter: 1
-  DensityFalloffThreshold: 15
+  DensityFalloffThreshold: 100
   UseMask: 0
   ReverseMask: 0

@@ -135,6 +135,7 @@ GameObject:
   - component: {fileID: 573583917}
   - component: {fileID: 573583916}
   - component: {fileID: 573583919}
+  - component: {fileID: 573583920}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -239,8 +240,8 @@ MonoBehaviour:
     m_Bits: 1
   m_VolumeTrigger: {fileID: 0}
   m_VolumeFrameworkUpdateModeOption: 2
-  m_RenderPostProcessing: 0
-  m_Antialiasing: 0
+  m_RenderPostProcessing: 1
+  m_Antialiasing: 2
   m_AntialiasingQuality: 2
   m_StopNaN: 0
   m_Dithering: 0
@@ -260,6 +261,46 @@ MonoBehaviour:
     mipBias: 0
     varianceClampScale: 0.9
     contrastAdaptiveSharpening: 0
+--- !u!114 &573583920
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 573583915}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 106f71ef05db5df49b6094d685e1f217, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  boost: 3.5
+  positionLerpTime: 0.2
+  mouseSensitivityCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0.5
+      inSlope: 0
+      outSlope: 5
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 2.5
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  rotationLerpTime: 0.01
+  invertY: 0
 --- !u!1 &585655421
 GameObject:
   m_ObjectHideFlags: 0
@@ -427,7 +468,7 @@ MeshFilter:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 758581714}
-  m_Mesh: {fileID: 1459326978}
+  m_Mesh: {fileID: 1324454427}
 --- !u!114 &758581718
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -443,7 +484,7 @@ MonoBehaviour:
   NumChunk: 3
   QuadPerChunk: 3
   size: {x: 9, y: 9}
-  PlaneMesh: {fileID: 1459326978}
+  PlaneMesh: {fileID: 1324454427}
 --- !u!23 &758581719
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -539,7 +580,7 @@ MonoBehaviour:
   ArrowMesh: {fileID: 0}
   ArrowMaterial: {fileID: 0}
   Lerp: 0
---- !u!43 &1459326978
+--- !u!43 &1324454427
 Mesh:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
