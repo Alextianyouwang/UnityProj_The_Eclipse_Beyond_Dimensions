@@ -16,7 +16,7 @@ MonoBehaviour:
   - {fileID: 4300000, guid: 19e6c15522128ae49b60270e1ac4575a, type: 2}
   - {fileID: 4300000, guid: 19e6c15522128ae49b60270e1ac4575a, type: 2}
   - {fileID: 4300000, guid: 19e6c15522128ae49b60270e1ac4575a, type: 2}
-  SpawnMeshMaterial: {fileID: 2100000, guid: 4a63e246b37500f42b2669305a776b47, type: 2}
+  SpawnMeshMaterial: {fileID: 2100000, guid: c241a132619fcad4b92fd89f85c8dff7, type: 2}
   DensityMap: {fileID: 2800000, guid: 53132e2a3adc9e74b9da408bd5e3fb05, type: 3}
   SquaredInstancePerTile: 5
   SquaredChunksPerCluster: 8

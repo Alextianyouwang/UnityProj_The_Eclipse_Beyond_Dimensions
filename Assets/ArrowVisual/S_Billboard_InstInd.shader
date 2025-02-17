@@ -1,4 +1,4 @@
-﻿Shader "Procedural/S_Billboard_InstInd"
+﻿Shader "Procedural/S_ArrowDirection_InstInd"
 {
     Properties
     {

@@ -86,7 +86,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 836948adba5d71f408ddce3575d1bcb5, type: 3}
   m_Name: VolumetricAtmosphereFeature
   m_EditorClassIdentifier: 
-  m_Active: 0
+  m_Active: 1
   showInSceneView: 1
   _event: 450
   PrebakedTextureQualitySetting: 3
