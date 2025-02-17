@@ -178,4 +178,34 @@ void FastSSS_float(float3 ViewDir, float3 LightDir, float3 WorldNormal, float3 L
     sss = saturate(pow(saturate(dot(-LAddN, -LAddN * Flood + ViewDir)), Power)) * LightColor;
     
 }
+
+// Function to compute the quaternion rotation
+float4 ComputeQuaternionRotation(float3 from, float3 to)
+{
+    float3 halfRot = normalize(from + to);
+    float4 quat;
+    quat.xyz = cross(from, halfRot);
+    quat.w = dot(from, halfRot);
+    return quat;
+}
+
+
+
+// Function to apply a quaternion to a vector
+float4 ApplyQuaternion(float4 q, float3 v)
+{
+    float3 qvec = q.xyz;
+    float3 uv = cross(qvec, v);
+    float3 uuv = cross(qvec, uv);
+    uv *= (2.0 * q.w);
+    uuv *= 2.0;
+    return float4(v + uv + uuv, 1.0);
+}
+
+float4 TransformWithAlignment(float4 input, float3 align, float3 target)
+{
+    float4 rotationQuat = ComputeQuaternionRotation(align, target);
+    float3 transformed = ApplyQuaternion(rotationQuat, input.xyz).xyz;
+    return float4(transformed, input.w);
+}
 #endif

@@ -14,6 +14,11 @@ public class SpawnOnMeshWithChunkingManager : MonoBehaviour
     private Chunk[] _dataChunks;
     private uint[] _chunkArgs;
 
+    public Mesh ArrowMesh;
+    public Material ArrowMaterial;
+
+    [Range(0,1)]
+    public float Lerp;
     private void OnEnable()
     {
 
@@ -86,6 +91,7 @@ public class SpawnOnMeshWithChunkingManager : MonoBehaviour
                 _gridShader.SetFloat("_Yoffset", root.y);
                 _gridShader.SetFloat("_Increment", pointInc);
                 _gridShader.SetBuffer(0, "_SpawnDataBuffer", c.spawnBuffer);
+                _gridShader.SetFloat("_Lerp", Lerp);
 
                 _gridShader.Dispatch(0, Mathf.CeilToInt (InstancePerChunk  / 8f), Mathf.CeilToInt(InstancePerChunk / 8f), 1);
                 _dataChunks[x * NumChunk + z] = c;
@@ -116,6 +122,10 @@ public class SpawnOnMeshWithChunkingManager : MonoBehaviour
                 Chunk c = _dataChunks[x * NumChunk + z];
                 if (c.argsBuffer == null)
                     continue;
+                _gridShader.Dispatch(0, Mathf.CeilToInt(InstancePerChunk / 8f), Mathf.CeilToInt(InstancePerChunk / 8f), 1);
+
+                _gridShader.SetFloat("_Lerp", Lerp);
+
                 Graphics.DrawMeshInstancedIndirect(TestMesh, 0,RenderingMaterial, bounds, c.argsBuffer,0, c.mpb);
             }
         }

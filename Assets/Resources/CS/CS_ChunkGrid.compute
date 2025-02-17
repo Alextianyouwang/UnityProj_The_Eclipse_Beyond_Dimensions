@@ -8,6 +8,7 @@ float _Increment;
 float _Xoffset;
 float _Yoffset;
 float4x4 _LocalToWorld;
+float _Lerp;
 
 struct SpawnData
 {
@@ -26,13 +27,13 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     
     float3 pos = float3(id.x,0, id.y) * _Increment + float3(_Xoffset,0, _Yoffset);
     float2 noise = rand2dTo2d(pos.xz) * _Increment;
-    pos.xz += noise;
+    pos.xz +=  noise * _Lerp;
     
     SpawnData o;
     o.hash = 0;
     o.clumpInfo = 0;
     o.positionWS = mul(_LocalToWorld, float4(pos,1)).xyz;
-    o.postureData = float4(0, 0, 0, 0);
+    o.postureData = float4(noise.x, 0, noise.y, 0);
     
     _SpawnDataBuffer[id.x * _NumPointPerSide + id.y] = o;
    
