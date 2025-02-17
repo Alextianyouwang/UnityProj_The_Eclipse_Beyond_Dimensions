@@ -167,10 +167,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 93eba5a07efa5204894c11729d9770f3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Width: 10
-  Height: 10
-  Radius: 0.42
-  Iterations: 10
+  Width: 12.73
+  Height: 10.47
+  Radius: 0.456
+  Iterations: 3
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

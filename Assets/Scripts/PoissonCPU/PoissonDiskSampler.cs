@@ -1,12 +1,15 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
-public static class PoissonDiskSampler 
+public class PoissonDiskSampler 
 {
     static int[] grids;
     static List<Vector2> allPoints;
     static List<Vector2> activePoints;
+    public List<Vector2> Allpoints => allPoints;
+    public List<Vector2> ActivePoints => activePoints;
 
-    public static List<Vector2> PoissonSamples(float r, int k , Vector2 area) 
+    public List<Vector2> PoissonSamples(float r, int k , Vector2 area) 
     {
         activePoints = new List<Vector2>();
         allPoints = new List<Vector2>();
@@ -48,6 +51,55 @@ public static class PoissonDiskSampler
                 activePoints.Remove(sample);
         }
         return allPoints;
+    }
+
+    public async void AnimatedDrawDisk (float r, int k, Vector2 area)
+    {
+        activePoints = new List<Vector2>();
+        allPoints = new List<Vector2>();
+        int N = 2;
+        float gridSize = r / Mathf.Sqrt(N);
+        int numGridX = Mathf.CeilToInt(area.x / gridSize) + 1;
+        int numGridY = Mathf.CeilToInt(area.y / gridSize) + 1;
+
+        grids = new int[numGridX * numGridY];
+        for (int x = 0; x < numGridX; x++)
+            for (int y = 0; y < numGridY; y++)
+                grids[x * numGridY + y] = -1;
+
+        Vector2 p0 = GetRandomPoint(area);
+        activePoints.Add(p0);
+        InsertPointToGrid(p0, gridSize, numGridY);
+
+        while (activePoints.Count > 0)
+        {
+            bool found = false;
+
+            Vector2 sample = activePoints[Random.Range(0, activePoints.Count - 1)];
+
+            for (int t = 0; t < k; t++)
+            {
+                float theta = Random.Range(0, Mathf.PI * 2);
+                float radius = Random.Range(r, 2 * r);
+                float posX = sample.x + Mathf.Cos(theta) * radius;
+                float posY = sample.y + Mathf.Sin(theta) * radius;
+                Vector2 newPoint = new Vector2(posX, posY);
+                await Task.Yield();
+                if (!IsValidPoint(newPoint, gridSize, r, area, numGridX, numGridY))
+                    continue;
+                activePoints.Add(newPoint);
+                InsertPointToGrid(newPoint, gridSize, numGridY);
+                found = true;
+                break;
+     
+            }
+            if (!found)
+                activePoints.Remove(sample);
+
+            await Task.Yield();
+        }
+        
+
     }
 
     static void InsertPointToGrid(Vector2 point,float gridSize, int numGridY) 
